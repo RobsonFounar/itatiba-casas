@@ -424,6 +424,12 @@ textarea {
   color: var(--muted);
 }
 
+.house-card .notes a {
+  color: var(--blue);
+  font-weight: 600;
+  word-break: break-all;
+}
+
 .chips {
   display: flex;
   flex-direction: column;

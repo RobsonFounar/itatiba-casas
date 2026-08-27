@@ -107,6 +107,25 @@
       .replace(/'/g, "&#39;");
   }
 
+  function linkify(text) {
+    const src = String(text || "");
+    const re = /https?:\/\/[^\s<>"']+/gi;
+    let out = "";
+    let last = 0;
+    let match;
+    while ((match = re.exec(src))) {
+      out += esc(src.slice(last, match.index));
+      const raw = match[0];
+      const trail = (raw.match(/[),.;!?]+$/) || [""])[0];
+      const url = trail ? raw.slice(0, -trail.length) : raw;
+      out += `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>`;
+      if (trail) out += esc(trail);
+      last = match.index + raw.length;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
   function cleanLabel(label) {
     return String(label || "")
       .replace(/,?\s*Southeast Region,?/gi, "")
@@ -810,7 +829,7 @@
               ${toggleLabel}
             </button>
             ${routePanel(house)}
-            ${house.notes ? `<p class="meta">${esc(house.notes)}</p>` : ""}
+            ${house.notes ? `<p class="meta notes">${linkify(house.notes)}</p>` : ""}
           `
           : "";
         const actions = expanded
@@ -868,7 +887,7 @@
           <input name="address" placeholder="Ex.: Rua das Flores, 120" value="${esc(address)}" />
         </label>
         <label class="field">Observações
-          <textarea name="notes" placeholder="Preço, link do anúncio, número de quartos...">${esc(notes)}</textarea>
+          <textarea name="notes" placeholder="Preço, https://link-do-anuncio, número de quartos...">${esc(notes)}</textarea>
         </label>
         <p class="help">Pode ser o nome do condomínio. Se o mapa não achar a rua, usa o ponto do condomínio ou do bairro. Depois você arrasta o pin até a casa.</p>
         <div class="form-actions">
@@ -1221,7 +1240,7 @@
     });
 
     els.panelBody.addEventListener("click", (ev) => {
-      if (ev.target.closest("[data-waze]")) {
+      if (ev.target.closest("a[href]")) {
         ev.stopPropagation();
         return;
       }
