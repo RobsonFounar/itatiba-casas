@@ -1,0 +1,7 @@
+{
+  "name": "itatiba-casas",
+  "private": true,
+  "scripts": {
+    "start": "npx --yes serve -l 5173"
+  }
+}
