@@ -211,10 +211,14 @@ textarea {
   flex-shrink: 0;
 }
 
+.school-icon svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
 .school-icon.centro {
   background: var(--green);
-  font-weight: 700;
-  font-size: 14px;
 }
 
 .school-card h2,
@@ -328,15 +332,19 @@ textarea {
   background: transparent;
   padding: 12px;
   border-radius: 12px;
-  cursor: pointer;
   display: grid;
   grid-template-columns: 36px 1fr auto;
   gap: 10px;
-  align-items: start;
+  align-items: center;
+}
+
+.house-card[data-expand] {
+  cursor: pointer;
 }
 
 .house-card:hover,
-.house-card.is-selected {
+.house-card.is-selected,
+.house-card.is-expanded {
   background: #f1f3f4;
 }
 
@@ -350,11 +358,64 @@ textarea {
   place-items: center;
   font-weight: 700;
   font-size: 13px;
+  cursor: pointer;
 }
 
 .house-card h3 {
   margin: 0;
   font-size: 14px;
+}
+
+.house-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 36px;
+  margin: -8px 0 0;
+  padding: 8px 8px 12px 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.house-card.is-expanded .house-head {
+  min-height: 56px;
+  padding: 8px 8px 14px 0;
+}
+
+.house-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.house-head:hover .house-name {
+  color: var(--blue);
+}
+
+.house-metric {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--green);
+}
+
+.house-metric.warn {
+  color: var(--amber);
+}
+
+.house-metric.bad {
+  color: var(--red);
+}
+
+.house-metric.neutral {
+  color: var(--muted);
 }
 
 .house-card .meta {
@@ -655,8 +716,14 @@ textarea {
 .pin span {
   transform: rotate(45deg);
   color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.pin span svg {
+  width: 15px;
+  height: 15px;
+  display: block;
 }
 
 .pin-house .pin {
@@ -669,8 +736,9 @@ textarea {
   height: 32px;
 }
 
-.pin-school .pin span {
-  font-size: 14px;
+.pin-school .pin span svg {
+  width: 16px;
+  height: 16px;
 }
 
 .pin-centro .pin {
@@ -679,8 +747,9 @@ textarea {
   height: 32px;
 }
 
-.pin-centro .pin span {
-  font-size: 13px;
+.pin-centro .pin span svg {
+  width: 16px;
+  height: 16px;
 }
 
 .pin-house.is-selected .pin {

@@ -27,6 +27,9 @@
     east: -46.66,
   };
 
+  const ICON_SCHOOL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3 1 9l11 6 9-4.91V17h2V9L12 3z"/></svg>`;
+  const ICON_CENTRO = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10h5V6l4-3 4 3v4h5v11"/><path d="M7 21v-4h3v4"/><path d="M14 21v-6h3v6"/><path d="M6 13h2"/><path d="M6 16h2"/><path d="M16 13h2"/></svg>`;
+
   const els = {
     panelBody: document.getElementById("panel-body"),
     schoolCard: document.getElementById("school-card"),
@@ -47,6 +50,7 @@
     school: null,
     houses: [],
     selectedId: null,
+    expandedId: null,
     view: "list",
     clickMode: null,
     searchHits: [],
@@ -489,7 +493,7 @@
   function schoolIcon() {
     return L.divIcon({
       className: "pin-school",
-      html: `<div class="pin"><span>★</span></div>`,
+      html: `<div class="pin"><span>${ICON_SCHOOL}</span></div>`,
       iconSize: [32, 32],
       iconAnchor: [16, 32],
       popupAnchor: [0, -32],
@@ -499,7 +503,7 @@
   function centroIcon() {
     return L.divIcon({
       className: "pin-centro",
-      html: `<div class="pin"><span>C</span></div>`,
+      html: `<div class="pin"><span>${ICON_CENTRO}</span></div>`,
       iconSize: [32, 32],
       iconAnchor: [16, 32],
       popupAnchor: [0, -32],
@@ -591,6 +595,8 @@
 
     L.marker([FIXED_SCHOOL.lat, FIXED_SCHOOL.lng], {
       icon: schoolIcon(),
+      title: FIXED_SCHOOL.name,
+      alt: FIXED_SCHOOL.name,
       zIndexOffset: 600,
       draggable: false,
     })
@@ -603,6 +609,8 @@
 
     L.marker([FIXED_CENTRO.lat, FIXED_CENTRO.lng], {
       icon: centroIcon(),
+      title: FIXED_CENTRO.name,
+      alt: "Centro da cidade",
       zIndexOffset: 600,
       draggable: false,
     })
@@ -645,6 +653,24 @@
     });
   }
 
+  function sortMetric(house) {
+    const key = els.sortBy.value;
+    const specs = {
+      schoolDrive: { km: house.toSchool?.driveKm, min: house.toSchool?.driveMin },
+      centroDrive: { km: house.toCentro?.driveKm, min: house.toCentro?.driveMin },
+      schoolWalk: { km: house.toSchool?.straightKm, min: house.toSchool?.walkMin },
+      centroWalk: { km: house.toCentro?.straightKm, min: house.toCentro?.walkMin },
+    };
+    const spec = specs[key];
+    if (!spec) return { text: "", cls: "neutral" };
+    return { text: formatKm(spec.km), cls: chipClass(spec.min) };
+  }
+
+  function toggleExpand(id) {
+    state.expandedId = state.expandedId === id ? null : id;
+    renderSidebar();
+  }
+
   function closeHouse() {
     state.selectedId = null;
     drawRoute(null);
@@ -663,6 +689,7 @@
 
   function selectHouse(id, fly) {
     state.selectedId = id;
+    state.expandedId = id;
     const house = state.houses.find((item) => item.id === id);
     drawRoute(house);
     if (fly && house) fitRoute(house);
@@ -717,7 +744,7 @@
     els.schoolCard.innerHTML = `
       <article class="anchor-card">
         <div class="school-top">
-          <div class="school-icon" aria-hidden="true">★</div>
+          <div class="school-icon" aria-hidden="true">${ICON_SCHOOL}</div>
           <div>
             <h2>${esc(FIXED_SCHOOL.name)}</h2>
             <p>${esc(FIXED_SCHOOL.subtitle)}</p>
@@ -728,7 +755,7 @@
       </article>
       <article class="anchor-card">
         <div class="school-top">
-          <div class="school-icon centro" aria-hidden="true">C</div>
+          <div class="school-icon centro" aria-hidden="true">${ICON_CENTRO}</div>
           <div>
             <h2>${esc(FIXED_CENTRO.name)}</h2>
             <p>${esc(FIXED_CENTRO.subtitle)}</p>
@@ -755,7 +782,9 @@
     els.panelBody.innerHTML = houses
       .map((house, i) => {
         const open = house.id === state.selectedId;
+        const expanded = house.id === state.expandedId;
         const condo = house.precision === "condominio";
+        const metric = sortMetric(house);
         const approx =
           condo
             ? `<span class="chip neutral">Ponto do condomínio</span>`
@@ -767,14 +796,11 @@
           : condo
             ? "Abrir ponto do condomínio"
             : "Abrir ponto";
-        return `
-        <article class="house-card ${open ? "is-selected" : ""}" data-select="${house.id}">
-          <div class="house-index">${i + 1}</div>
-          <div>
-            <h3>${esc(house.title)}</h3>
-            <p class="meta">${esc(house.bairro || "Bairro não informado")}${
-              house.address ? ` · ${esc(house.address)}` : ""
-            }</p>
+        const addressLine = `${esc(house.bairro || "Bairro não informado")}${
+          house.address ? ` · ${esc(house.address)}` : ""
+        }`;
+        const details = expanded
+          ? `
             <div class="chips-wrap">
               ${distRow("Colégio", "school", house.toSchool, house.id, "school")}
               ${distRow("Centro", "centro", house.toCentro, house.id, "centro")}
@@ -785,11 +811,28 @@
             </button>
             ${routePanel(house)}
             ${house.notes ? `<p class="meta">${esc(house.notes)}</p>` : ""}
-          </div>
+          `
+          : "";
+        const actions = expanded
+          ? `
           <div class="card-actions">
             <button type="button" data-edit="${house.id}">Editar</button>
             <button type="button" data-del="${house.id}">Excluir</button>
+          </div>`
+          : metric.text
+            ? `<span class="house-metric ${metric.cls}">${esc(metric.text)}</span>`
+            : "";
+        return `
+        <article class="house-card ${open ? "is-selected" : ""} ${expanded ? "is-expanded" : ""}"${expanded ? "" : ` data-expand="${house.id}"`}>
+          <div class="house-index" data-expand="${house.id}">${i + 1}</div>
+          <div>
+            <button type="button" class="house-head" data-expand="${house.id}">
+              <span class="house-name">${esc(house.title)}</span>
+              ${expanded ? `<span class="meta">${addressLine}</span>` : ""}
+            </button>
+            ${details}
           </div>
+          ${actions}
         </article>
       `;
       })
@@ -1191,8 +1234,14 @@
       if (del) {
         state.houses = state.houses.filter((item) => item.id !== del);
         if (state.selectedId === del) state.selectedId = null;
+        if (state.expandedId === del) state.expandedId = null;
         save();
         render();
+        return;
+      }
+      const expand = ev.target.closest("[data-expand]")?.dataset.expand;
+      if (expand) {
+        toggleExpand(expand);
         return;
       }
       const edit = ev.target.closest("[data-edit]")?.dataset.edit;
