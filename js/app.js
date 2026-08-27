@@ -33,9 +33,6 @@
   const els = {
     panelBody: document.getElementById("panel-body"),
     schoolCard: document.getElementById("school-card"),
-    searchForm: document.getElementById("search-form"),
-    searchInput: document.getElementById("search-input"),
-    searchResults: document.getElementById("search-results"),
     sortBy: document.getElementById("sort-by"),
     btnAdd: document.getElementById("btn-add"),
     btnMenu: document.getElementById("btn-menu"),
@@ -790,7 +787,7 @@
       els.panelBody.innerHTML = `
         <div class="empty-state">
           <h3>Nenhuma casa na lista</h3>
-          <p>Busque um condomínio ou bairro na barra de cima, ou toque em Adicionar. Cada casa mostra o tempo até o colégio e até o centro.</p>
+          <p>Toque em Adicionar para buscar um condomínio, bairro ou rua. Cada casa mostra o tempo até o colégio e até o centro.</p>
         </div>
       `;
       return;
@@ -889,28 +886,49 @@
     const bairro = house?.bairro || "";
     const address = house?.address || "";
     const notes = house?.notes || "";
+    const searchBlock = isEdit
+      ? ""
+      : `
+        <form class="place-search" id="search-form" autocomplete="off">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path fill="currentColor" d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z" />
+          </svg>
+          <input
+            id="search-input"
+            type="search"
+            placeholder="Buscar condomínio, bairro ou rua"
+            aria-label="Buscar em Itatiba"
+          />
+          <button type="submit">Buscar</button>
+        </form>
+        <ul class="search-results hidden" id="search-results"></ul>
+        <p class="help">Toque em Adicionar casa no resultado. Ou preencha abaixo e clique no mapa.</p>
+      `;
     els.panelBody.innerHTML = `
-      <form class="form-stack" id="house-form">
+      <div class="form-stack">
         <h3>${isEdit ? "Editar casa" : "Nova casa"}</h3>
-        <label class="field">Apelido
-          <input name="title" required placeholder="Ex.: Casa 3 quartos no Engenho" value="${esc(title)}" />
-        </label>
-        <label class="field">Bairro ou condomínio
-          <input name="bairro" list="bairros-list" required placeholder="Ex.: Ville de France, Nova Itatiba" value="${esc(bairro)}" />
-          <datalist id="bairros-list">${bairroOptions(bairro)}</datalist>
-        </label>
-        <label class="field">Rua e número (opcional)
-          <input name="address" placeholder="Ex.: Rua das Flores, 120" value="${esc(address)}" />
-        </label>
-        <label class="field">Observações
-          <textarea name="notes" placeholder="Preço, https://link-do-anuncio, número de quartos...">${esc(notes)}</textarea>
-        </label>
-        <p class="help">Complete o apelido, a rua e as observações. Se o mapa não achar a rua, usa o ponto do condomínio. Depois você arrasta o pin até a casa.</p>
-        <div class="form-actions">
-          <button class="primary-btn" type="submit">${isEdit ? "Salvar" : "Adicionar"}</button>
-          <button class="text-btn" type="button" data-go="list">Cancelar</button>
-        </div>
-      </form>
+        ${searchBlock}
+        <form id="house-form" class="house-fields">
+          <label class="field">Apelido
+            <input name="title" required placeholder="Ex.: Casa 3 quartos no Engenho" value="${esc(title)}" />
+          </label>
+          <label class="field">Bairro ou condomínio
+            <input name="bairro" list="bairros-list" required placeholder="Ex.: Ville de France, Nova Itatiba" value="${esc(bairro)}" />
+            <datalist id="bairros-list">${bairroOptions(bairro)}</datalist>
+          </label>
+          <label class="field">Rua e número (opcional)
+            <input name="address" placeholder="Ex.: Rua das Flores, 120" value="${esc(address)}" />
+          </label>
+          <label class="field">Observações
+            <textarea name="notes" placeholder="Preço, https://link-do-anuncio, número de quartos...">${esc(notes)}</textarea>
+          </label>
+          <p class="help">Complete o apelido, a rua e as observações. Se o mapa não achar a rua, usa o ponto do condomínio. Depois você arrasta o pin até a casa.</p>
+          <div class="form-actions">
+            <button class="primary-btn" type="submit">${isEdit ? "Salvar" : "Adicionar"}</button>
+            <button class="text-btn" type="button" data-go="list">Cancelar</button>
+          </div>
+        </form>
+      </div>
     `;
   }
 
@@ -1091,10 +1109,19 @@
     });
   }
 
+  function searchBox() {
+    return {
+      input: document.getElementById("search-input"),
+      results: document.getElementById("search-results"),
+    };
+  }
+
   async function runSearch(query) {
+    const box = searchBox();
+    if (!box.results) return;
     if (!query.trim()) {
-      els.searchResults.classList.add("hidden");
-      els.searchResults.innerHTML = "";
+      box.results.classList.add("hidden");
+      box.results.innerHTML = "";
       return;
     }
     try {
@@ -1105,11 +1132,11 @@
       state.searchHits = hits;
       state.searchActive = hits.length ? 0 : -1;
       if (!hits.length) {
-        els.searchResults.innerHTML = `<li>Nada encontrado em Itatiba para “${esc(query)}”. Tente o nome do condomínio, o bairro ou clique no mapa.</li>`;
-        els.searchResults.classList.remove("hidden");
+        box.results.innerHTML = `<li>Nada encontrado em Itatiba para “${esc(query)}”. Tente o nome do condomínio, o bairro ou clique no mapa.</li>`;
+        box.results.classList.remove("hidden");
         return;
       }
-      els.searchResults.innerHTML = hits
+      box.results.innerHTML = hits
         .map(
           (hit, i) => `
           <li data-hit="${i}" class="${i === 0 ? "is-active" : ""}">
@@ -1121,7 +1148,7 @@
           </li>`
         )
         .join("");
-      els.searchResults.classList.remove("hidden");
+      box.results.classList.remove("hidden");
     } catch {
       toast("A busca está indisponível no momento.");
     }
@@ -1144,8 +1171,12 @@
     });
     save();
     map.flyTo([hit.lat, hit.lng], 16);
-    els.searchResults.classList.add("hidden");
-    els.searchInput.value = "";
+    const box = searchBox();
+    if (box.results) {
+      box.results.classList.add("hidden");
+      box.results.innerHTML = "";
+    }
+    if (box.input) box.input.value = "";
     state.editingId = id;
     state.expandedId = id;
     go("edit");
@@ -1270,6 +1301,12 @@
         go(goTo);
         return;
       }
+      const useBtn = ev.target.closest("[data-use]");
+      const hitItem = ev.target.closest("[data-hit]");
+      if (useBtn && hitItem) {
+        useHit(Number(hitItem.dataset.hit));
+        return;
+      }
       const del = ev.target.closest("[data-del]")?.dataset.del;
       if (del) {
         ev.stopPropagation();
@@ -1312,23 +1349,16 @@
     els.panelBody.addEventListener("submit", (ev) => {
       ev.preventDefault();
       if (ev.target.id === "house-form") submitHouse(ev.target);
+      if (ev.target.id === "search-form") {
+        const input = ev.target.querySelector("#search-input");
+        runSearch(input?.value || "");
+      }
     });
 
-    els.searchForm.addEventListener("submit", (ev) => {
-      ev.preventDefault();
-      runSearch(els.searchInput.value);
-    });
-
-    els.searchInput.addEventListener("input", () => {
+    els.panelBody.addEventListener("input", (ev) => {
+      if (ev.target.id !== "search-input") return;
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => runSearch(els.searchInput.value), 400);
-    });
-
-    els.searchResults.addEventListener("click", (ev) => {
-      const btn = ev.target.closest("[data-use]");
-      const li = ev.target.closest("[data-hit]");
-      if (!btn || !li) return;
-      useHit(Number(li.dataset.hit));
+      searchTimer = setTimeout(() => runSearch(ev.target.value), 400);
     });
   }
 
