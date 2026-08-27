@@ -234,9 +234,10 @@
     return {
       lat: item.lat,
       lng: item.lng,
-      label: `${item.nome}, Itatiba, SP`,
+      label: item.address ? `${item.nome} · ${item.address}` : `${item.nome}, Itatiba, SP`,
       name: item.nome,
       tipo: item.tipo,
+      address: item.address || "",
     };
   }
 
@@ -324,6 +325,7 @@
 
     const attempts = [
       ...queryFallbacks(query),
+      ...local.map((row) => row.item.address).filter(Boolean),
       ...local.map((row) => `Condomínio ${row.item.nome}`),
       ...local.map((row) => row.item.nome),
     ];
@@ -473,7 +475,8 @@
     }
     state.houses = next;
     save();
-    render();
+    if (state.view === "list") render();
+    else renderMarkers();
   }
 
   function sortedHouses() {
@@ -761,28 +764,23 @@
   function renderSchoolCard() {
     els.schoolCard.className = "anchors";
     els.schoolCard.innerHTML = `
-      <article class="anchor-card">
-        <div class="school-top">
-          <div class="school-icon" aria-hidden="true">${ICON_SCHOOL}</div>
-          <div>
-            <h2>${esc(FIXED_SCHOOL.name)}</h2>
-            <p>${esc(FIXED_SCHOOL.subtitle)}</p>
-            <p>${esc(FIXED_SCHOOL.address)}</p>
-          </div>
-        </div>
-        <button class="ghost-btn" type="button" data-fly="school">Ver no mapa</button>
-      </article>
-      <article class="anchor-card">
-        <div class="school-top">
-          <div class="school-icon centro" aria-hidden="true">${ICON_CENTRO}</div>
-          <div>
-            <h2>${esc(FIXED_CENTRO.name)}</h2>
-            <p>${esc(FIXED_CENTRO.subtitle)}</p>
-            <p>${esc(FIXED_CENTRO.address)}</p>
-          </div>
-        </div>
-        <button class="ghost-btn" type="button" data-fly="centro">Ver no mapa</button>
-      </article>
+      <p class="anchors-label">Pontos de comparação</p>
+      <div class="anchor-row">
+        <button type="button" class="anchor-chip" data-fly="school">
+          <span class="school-icon" aria-hidden="true">${ICON_SCHOOL}</span>
+          <span class="anchor-text">
+            <strong>${esc(FIXED_SCHOOL.name)}</strong>
+            <small>${esc(FIXED_SCHOOL.subtitle)}</small>
+          </span>
+        </button>
+        <button type="button" class="anchor-chip" data-fly="centro">
+          <span class="school-icon centro" aria-hidden="true">${ICON_CENTRO}</span>
+          <span class="anchor-text">
+            <strong>${esc(FIXED_CENTRO.name)}</strong>
+            <small>${esc(FIXED_CENTRO.subtitle)}</small>
+          </span>
+        </button>
+      </div>
     `;
   }
 
@@ -791,14 +789,16 @@
     if (!houses.length) {
       els.panelBody.innerHTML = `
         <div class="empty-state">
-          <h3>Nenhuma casa ainda</h3>
-          <p>Adicione pelo bairro, condomínio, rua ou clique no mapa. Cada casa mostra o tempo até o colégio e até o centro.</p>
+          <h3>Nenhuma casa na lista</h3>
+          <p>Busque um condomínio ou bairro na barra de cima, ou toque em Adicionar. Cada casa mostra o tempo até o colégio e até o centro.</p>
         </div>
       `;
       return;
     }
 
-    els.panelBody.innerHTML = houses
+    els.panelBody.innerHTML = `
+      <p class="list-heading">Suas casas</p>
+      ${houses
       .map((house, i) => {
         const open = house.id === state.selectedId;
         const expanded = house.id === state.expandedId;
@@ -829,33 +829,49 @@
               ${toggleLabel}
             </button>
             ${routePanel(house)}
-            ${house.notes ? `<p class="meta notes">${linkify(house.notes)}</p>` : ""}
+            ${
+              house.notes
+                ? `<div class="house-notes">
+                    <span class="notes-label">Observações</span>
+                    <p class="notes">${linkify(house.notes)}</p>
+                  </div>`
+                : ""
+            }
+            <div class="card-actions">
+              <button type="button" class="action-btn edit" data-edit="${house.id}">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                </svg>
+                Editar
+              </button>
+              <button type="button" class="action-btn delete" data-del="${house.id}">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path fill="currentColor" d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+                </svg>
+                Excluir
+              </button>
+            </div>
           `
           : "";
-        const actions = expanded
-          ? `
-          <div class="card-actions">
-            <button type="button" data-edit="${house.id}">Editar</button>
-            <button type="button" data-del="${house.id}">Excluir</button>
-          </div>`
-          : metric.text
-            ? `<span class="house-metric ${metric.cls}">${esc(metric.text)}</span>`
-            : "";
+        const metricEl = !expanded && metric.text
+          ? `<span class="house-metric ${metric.cls}">${esc(metric.text)}</span>`
+          : "";
         return `
         <article class="house-card ${open ? "is-selected" : ""} ${expanded ? "is-expanded" : ""}"${expanded ? "" : ` data-expand="${house.id}"`}>
           <div class="house-index" data-expand="${house.id}">${i + 1}</div>
-          <div>
+          <div class="house-body">
             <button type="button" class="house-head" data-expand="${house.id}">
               <span class="house-name">${esc(house.title)}</span>
               ${expanded ? `<span class="meta">${addressLine}</span>` : ""}
             </button>
             ${details}
           </div>
-          ${actions}
+          ${metricEl}
         </article>
       `;
       })
-      .join("");
+      .join("")}
+    `;
   }
 
   function bairroOptions(selected) {
@@ -889,7 +905,7 @@
         <label class="field">Observações
           <textarea name="notes" placeholder="Preço, https://link-do-anuncio, número de quartos...">${esc(notes)}</textarea>
         </label>
-        <p class="help">Pode ser o nome do condomínio. Se o mapa não achar a rua, usa o ponto do condomínio ou do bairro. Depois você arrasta o pin até a casa.</p>
+        <p class="help">Complete o apelido, a rua e as observações. Se o mapa não achar a rua, usa o ponto do condomínio. Depois você arrasta o pin até a casa.</p>
         <div class="form-actions">
           <button class="primary-btn" type="submit">${isEdit ? "Salvar" : "Adicionar"}</button>
           <button class="text-btn" type="button" data-go="list">Cancelar</button>
@@ -1115,11 +1131,12 @@
     const hit = state.searchHits[index];
     if (!hit) return;
     const info = await reverseGeocode(hit.lat, hit.lng);
+    const id = uid();
     state.houses.push({
-      id: uid(),
+      id,
       title: hit.name,
       bairro: hit.name,
-      address: info?.road || "",
+      address: hit.address || info?.road || "",
       notes: "",
       lat: hit.lat,
       lng: hit.lng,
@@ -1127,9 +1144,13 @@
     });
     save();
     map.flyTo([hit.lat, hit.lng], 16);
-    await refreshDistances();
     els.searchResults.classList.add("hidden");
     els.searchInput.value = "";
+    state.editingId = id;
+    state.expandedId = id;
+    go("edit");
+    toast("Casa adicionada. Complete apelido, observações ou o link do anúncio.");
+    await refreshDistances();
   }
 
   function exportData() {
@@ -1251,6 +1272,7 @@
       }
       const del = ev.target.closest("[data-del]")?.dataset.del;
       if (del) {
+        ev.stopPropagation();
         state.houses = state.houses.filter((item) => item.id !== del);
         if (state.selectedId === del) state.selectedId = null;
         if (state.expandedId === del) state.expandedId = null;
@@ -1258,15 +1280,16 @@
         render();
         return;
       }
+      const edit = ev.target.closest("[data-edit]")?.dataset.edit;
+      if (edit) {
+        ev.stopPropagation();
+        state.editingId = edit;
+        go("edit");
+        return;
+      }
       const expand = ev.target.closest("[data-expand]")?.dataset.expand;
       if (expand) {
         toggleExpand(expand);
-        return;
-      }
-      const edit = ev.target.closest("[data-edit]")?.dataset.edit;
-      if (edit) {
-        state.editingId = edit;
-        go("edit");
         return;
       }
       const toggle = ev.target.closest("[data-toggle]")?.dataset.toggle;

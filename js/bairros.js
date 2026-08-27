@@ -127,7 +127,7 @@ window.ITATIBA_LOCAIS = [
   { nome: "Savoia Palace", tipo: "condominio", aliases: ["Savoia Palace Itatiba"] },
   { nome: "Jardim Botânico", tipo: "condominio", aliases: ["Loteamento Residencial Jardim Botânico"] },
   { nome: "Green Ville", tipo: "condominio", aliases: ["Residencial Green Ville"] },
-  { nome: "Villa Di Parma", tipo: "condominio" },
+  { nome: "Villa Di Parma", tipo: "condominio", aliases: ["Condomínio Villa Di Parma", "Residencial Villa Di Parma", "Villa de Parma", "Vila Di Parma"], address: "Rua Santa Maria, 236 — Vila Santa Terezinha", lat: -23.006132, lng: -46.829095 },
   { nome: "San Paolo Residencial", tipo: "condominio", aliases: ["San Paolo"] },
   { nome: "Terras Nobres", tipo: "condominio", aliases: ["Residencial Terras Nobres"] },
   { nome: "Reserva Bellano", tipo: "condominio", aliases: ["Residencial Reserva Bellano"] },
