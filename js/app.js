@@ -30,13 +30,22 @@
   const ICON_SCHOOL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3 1 9l11 6 9-4.91V17h2V9L12 3z"/></svg>`;
   const ICON_CENTRO = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10h5V6l4-3 4 3v4h5v11"/><path d="M7 21v-4h3v4"/><path d="M14 21v-6h3v6"/><path d="M6 13h2"/><path d="M6 16h2"/><path d="M16 13h2"/></svg>`;
 
+  const API = window.ItatibaAPI;
   const els = {
+    authScreen: document.getElementById("auth-screen"),
+    authCard: document.getElementById("auth-card"),
+    appShell: document.getElementById("app-shell"),
     panelBody: document.getElementById("panel-body"),
     schoolCard: document.getElementById("school-card"),
     sortBy: document.getElementById("sort-by"),
     btnAdd: document.getElementById("btn-add"),
     btnMenu: document.getElementById("btn-menu"),
     menuPop: document.getElementById("menu-pop"),
+    menuUser: document.getElementById("menu-user"),
+    menuShared: document.getElementById("menu-shared"),
+    menuAdmin: document.getElementById("menu-admin"),
+    menuMine: document.getElementById("menu-mine"),
+    scopeBar: document.getElementById("scope-bar"),
     importFile: document.getElementById("import-file"),
     mapHint: document.getElementById("map-hint"),
     navBanner: document.getElementById("nav-banner"),
@@ -55,6 +64,19 @@
     editingId: null,
     draftPoint: null,
     routeFocus: "school",
+    user: null,
+    profile: null,
+    authMode: "login",
+    authError: "",
+    scope: "mine",
+    sharedOwnerId: null,
+    sharedOwnerLabel: "",
+    sharedCanEdit: false,
+    incomingShares: [],
+    outgoingShares: [],
+    adminOwners: [],
+    mapReady: false,
+    saveTimer: null,
   };
 
   let map;
@@ -64,21 +86,147 @@
   let searchTimer;
   let toastTimer;
 
-  function load() {
-    state.school = { ...FIXED_SCHOOL };
+  function readLocalHouses() {
     try {
       const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      state.houses = Array.isArray(raw.houses) ? raw.houses : [];
+      return Array.isArray(raw.houses) ? raw.houses : [];
     } catch {
-      state.houses = [];
+      return [];
     }
   }
 
-  function save() {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ school: state.school, houses: state.houses })
+  function clearLocalHouses() {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  function isAdmin() {
+    return state.profile?.role === "admin";
+  }
+
+  function canEditHouse(house) {
+    if (!state.user || !house) return false;
+    if (house.userId === state.user.id) return true;
+    return Boolean(house.canEdit);
+  }
+
+  function canAddHouses() {
+    if (!state.user) return false;
+    if (state.scope === "mine") return true;
+    if (state.scope === "shared") return Boolean(state.sharedCanEdit);
+    return false;
+  }
+
+  async function loadHousesFromCloud() {
+    if (state.scope === "all" && isAdmin()) {
+      const houses = await API.listAllHouses();
+      const owners = await API.adminListOwners();
+      state.adminOwners = owners;
+      const byId = Object.fromEntries(owners.map((o) => [o.ownerId, o]));
+      state.houses = houses.map((h) => ({
+        ...h,
+        ownerEmail: byId[h.userId]?.email || h.ownerEmail || "",
+        ownerName: byId[h.userId]?.name || h.ownerName || "",
+        canEdit: false,
+      }));
+      return;
+    }
+    if (state.scope === "shared" && state.sharedOwnerId) {
+      state.houses = await API.listHousesByOwner(
+        state.sharedOwnerId,
+        state.sharedCanEdit
+      );
+      return;
+    }
+    state.scope = "mine";
+    state.sharedOwnerId = null;
+    state.sharedOwnerLabel = "";
+    state.sharedCanEdit = false;
+    state.houses = await API.listMyHouses();
+  }
+
+  async function refreshSharesMeta() {
+    try {
+      state.incomingShares = await API.listIncomingShares();
+      state.outgoingShares = await API.listOutgoingShares();
+    } catch {
+      state.incomingShares = [];
+      state.outgoingShares = [];
+    }
+    els.menuShared?.classList.toggle("hidden", !state.incomingShares.length);
+    els.menuAdmin?.classList.toggle("hidden", !isAdmin());
+    els.menuMine?.classList.toggle(
+      "hidden",
+      state.scope === "mine" || (!isAdmin() && !state.incomingShares.length)
     );
+  }
+
+  async function load() {
+    state.school = { ...FIXED_SCHOOL };
+    await loadHousesFromCloud();
+    await refreshSharesMeta();
+  }
+
+  function scheduleSaveHouse(house) {
+    if (!house || !canEditHouse(house)) return;
+    clearTimeout(state.saveTimer);
+    state.saveTimer = setTimeout(() => {
+      persistHouse(house).catch((err) => {
+        console.error(err);
+        toast("Não foi possível salvar na nuvem.");
+      });
+    }, 350);
+  }
+
+  async function persistHouse(house) {
+    if (!canEditHouse(house)) return house;
+    const saved = await API.upsertHouse(house);
+    const idx = state.houses.findIndex((item) => item.id === house.id);
+    if (idx >= 0) {
+      state.houses[idx] = {
+        ...state.houses[idx],
+        ...saved,
+        canEdit: canEditHouse({ ...state.houses[idx], ...saved, canEdit: state.houses[idx].canEdit }),
+      };
+    }
+    return saved;
+  }
+
+  async function save() {
+    const editable = state.houses.filter((house) => canEditHouse(house));
+    await Promise.all(editable.map((house) => API.upsertHouse(house)));
+  }
+
+  function updateMenuUser() {
+    if (!els.menuUser) return;
+    const label = state.profile?.email || state.user?.email || "";
+    const role = isAdmin() ? " · admin" : "";
+    els.menuUser.textContent = label ? `${label}${role}` : "";
+  }
+
+  function updateScopeBar() {
+    if (!els.scopeBar) return;
+    if (state.scope === "mine") {
+      els.scopeBar.classList.add("hidden");
+      els.scopeBar.innerHTML = "";
+      els.btnAdd.disabled = false;
+      els.btnAdd.classList.remove("hidden");
+      return;
+    }
+    els.scopeBar.classList.remove("hidden");
+    if (state.scope === "all") {
+      els.scopeBar.innerHTML = `
+        <span>Visão admin: todas as casas</span>
+        <button type="button" data-scope="mine">Minhas casas</button>
+      `;
+      els.btnAdd.classList.add("hidden");
+      return;
+    }
+    const editLabel = state.sharedCanEdit ? "pode editar" : "somente leitura";
+    els.scopeBar.innerHTML = `
+      <span>Lista de ${esc(state.sharedOwnerLabel || "outro usuário")} · ${editLabel}</span>
+      <button type="button" data-scope="mine">Minhas casas</button>
+    `;
+    els.btnAdd.classList.toggle("hidden", !state.sharedCanEdit);
   }
 
   function geoCache() {
@@ -471,7 +619,12 @@
       next.push({ ...house, toSchool, toCentro });
     }
     state.houses = next;
-    save();
+    try {
+      await save();
+    } catch (err) {
+      console.error(err);
+      toast("Distâncias calculadas, mas falhou ao salvar na nuvem.");
+    }
     if (state.view === "list") render();
     else renderMarkers();
   }
@@ -783,22 +936,33 @@
 
   function renderList() {
     const houses = sortedHouses();
+    const heading =
+      state.scope === "all"
+        ? "Todas as casas"
+        : state.scope === "shared"
+          ? "Lista compartilhada"
+          : "Suas casas";
     if (!houses.length) {
       els.panelBody.innerHTML = `
         <div class="empty-state">
           <h3>Nenhuma casa na lista</h3>
-          <p>Toque em Adicionar para buscar um condomínio, bairro ou rua. Cada casa mostra o tempo até o colégio e até o centro.</p>
+          <p>${
+            canAddHouses()
+              ? "Toque em Adicionar para buscar um condomínio, bairro ou rua. Cada casa mostra o tempo até o colégio e até o centro."
+              : "Esta lista ainda não tem casas."
+          }</p>
         </div>
       `;
       return;
     }
 
     els.panelBody.innerHTML = `
-      <p class="list-heading">Suas casas</p>
+      <p class="list-heading">${heading}</p>
       ${houses
       .map((house, i) => {
         const open = house.id === state.selectedId;
         const expanded = house.id === state.expandedId;
+        const editable = canEditHouse(house);
         const condo = house.precision === "condominio";
         const metric = sortMetric(house);
         const approx =
@@ -815,6 +979,27 @@
         const addressLine = `${esc(house.bairro || "Bairro não informado")}${
           house.address ? ` · ${esc(house.address)}` : ""
         }`;
+        const ownerLine =
+          state.scope === "all" && (house.ownerEmail || house.ownerName)
+            ? `<span class="owner-chip">${esc(house.ownerName || house.ownerEmail)}</span>`
+            : "";
+        const actions = editable
+          ? `
+            <div class="card-actions">
+              <button type="button" class="action-btn edit" data-edit="${house.id}">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                </svg>
+                Editar
+              </button>
+              <button type="button" class="action-btn delete" data-del="${house.id}">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path fill="currentColor" d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+                </svg>
+                Excluir
+              </button>
+            </div>`
+          : `<p class="help">Somente leitura<span class="readonly-badge">privado</span></p>`;
         const details = expanded
           ? `
             <div class="chips-wrap">
@@ -834,20 +1019,7 @@
                   </div>`
                 : ""
             }
-            <div class="card-actions">
-              <button type="button" class="action-btn edit" data-edit="${house.id}">
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                  <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-                </svg>
-                Editar
-              </button>
-              <button type="button" class="action-btn delete" data-del="${house.id}">
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                  <path fill="currentColor" d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-                </svg>
-                Excluir
-              </button>
-            </div>
+            ${actions}
           `
           : "";
         const metricEl = !expanded && metric.text
@@ -859,7 +1031,7 @@
           <div class="house-body">
             <button type="button" class="house-head" data-expand="${house.id}">
               <span class="house-name">${esc(house.title)}</span>
-              ${expanded ? `<span class="meta">${addressLine}</span>` : ""}
+              ${expanded ? `<span class="meta">${addressLine}</span>${ownerLine}` : ownerLine}
             </button>
             ${details}
           </div>
@@ -932,21 +1104,211 @@
     `;
   }
 
+  function renderAuthSetup() {
+    const cfg = API.mergeConfig();
+    els.authCard.innerHTML = `
+      <h1>Configurar nuvem</h1>
+      <p class="auth-sub">Cole a URL e a chave anon do Supabase para ativar contas e casas privadas.</p>
+      <form class="auth-setup" id="setup-form">
+        <label class="field">Project URL
+          <input name="supabaseUrl" required placeholder="https://xxxx.supabase.co" value="${esc(cfg.supabaseUrl)}" />
+        </label>
+        <label class="field">anon public key
+          <input name="supabaseAnonKey" required placeholder="eyJhbGciOi..." value="${esc(cfg.supabaseAnonKey)}" />
+        </label>
+        <p class="auth-error ${state.authError ? "" : "hidden"}">${esc(state.authError)}</p>
+        <button class="primary-btn full" type="submit">Salvar e continuar</button>
+      </form>
+      <p class="auth-help">
+        1) Crie um projeto em supabase.com<br />
+        2) Rode o SQL de <code>supabase/schema.sql</code><br />
+        3) Em Settings → API, copie URL e anon key<br />
+        4) Para Google: Authentication → Providers → Google
+      </p>
+    `;
+  }
+
+  function renderAuthForm() {
+    const isLogin = state.authMode === "login";
+    els.authCard.innerHTML = `
+      <h1>Itatiba</h1>
+      <p class="auth-sub">Entre para salvar suas casas na nuvem. Só você vê o que cadastrou.</p>
+      <div class="auth-tabs">
+        <button type="button" data-auth-mode="login" class="${isLogin ? "is-on" : ""}">Entrar</button>
+        <button type="button" data-auth-mode="signup" class="${!isLogin ? "is-on" : ""}">Criar conta</button>
+      </div>
+      <form class="auth-form" id="auth-form">
+        <label class="field">Email
+          <input name="email" type="email" required autocomplete="email" placeholder="voce@email.com" />
+        </label>
+        <label class="field">Senha
+          <input name="password" type="password" required minlength="6" autocomplete="${isLogin ? "current-password" : "new-password"}" placeholder="Mínimo 6 caracteres" />
+        </label>
+        <p class="auth-error ${state.authError ? "" : "hidden"}">${esc(state.authError)}</p>
+        <button class="primary-btn full" type="submit">${isLogin ? "Entrar" : "Criar conta"}</button>
+      </form>
+      <div class="auth-divider">ou</div>
+      <button type="button" class="google-btn" id="btn-google">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Continuar com Google
+      </button>
+      <p class="auth-help">Ao criar conta, suas casas ficam salvas e privadas na sua sessão.</p>
+    `;
+  }
+
+  function renderAuth() {
+    els.authScreen.classList.remove("hidden");
+    els.appShell.classList.add("hidden");
+    if (!API.isConfigured()) renderAuthSetup();
+    else renderAuthForm();
+  }
+
+  async function renderShareView() {
+    state.view = "share";
+    await refreshSharesMeta();
+    els.panelBody.innerHTML = `
+      <div class="form-stack">
+        <h3>Compartilhar lista</h3>
+        <p class="help">A pessoa precisa ter conta neste app. Ela verá suas casas; marque edição se quiser que ela altere.</p>
+        <form id="share-form" class="house-fields">
+          <label class="field">Email do convidado
+            <input name="email" type="email" required placeholder="amigo@email.com" />
+          </label>
+          <label class="field" style="flex-direction:row;align-items:center;gap:8px;font-weight:500">
+            <input name="canEdit" type="checkbox" style="width:auto" />
+            Permitir editar minhas casas
+          </label>
+          <div class="form-actions">
+            <button class="primary-btn" type="submit">Compartilhar</button>
+            <button class="text-btn" type="button" data-go="list">Voltar</button>
+          </div>
+        </form>
+        <p class="list-heading">Quem já tem acesso</p>
+        <div class="share-list">
+          ${
+            state.outgoingShares.length
+              ? state.outgoingShares
+                  .map(
+                    (share) => `
+                <div class="share-item">
+                  <div>
+                    <strong>${esc(share.name || share.email)}</strong>
+                    <small>${esc(share.email)} · ${share.canEdit ? "pode editar" : "somente leitura"}</small>
+                  </div>
+                  <button type="button" class="text-btn" data-revoke="${share.id}">Remover</button>
+                </div>`
+                  )
+                  .join("")
+              : `<p class="help">Nenhum compartilhamento ainda.</p>`
+          }
+        </div>
+      </div>
+    `;
+  }
+
+  async function renderSharedWithMeView() {
+    state.view = "shared-with-me";
+    await refreshSharesMeta();
+    els.panelBody.innerHTML = `
+      <div class="form-stack">
+        <h3>Listas compartilhadas comigo</h3>
+        <div class="share-list">
+          ${
+            state.incomingShares.length
+              ? state.incomingShares
+                  .map(
+                    (share) => `
+                <div class="share-item">
+                  <div>
+                    <strong>${esc(share.name || share.email)}</strong>
+                    <small>${esc(share.email)} · ${share.canEdit ? "pode editar" : "somente leitura"}</small>
+                  </div>
+                  <button type="button" class="primary-btn" data-open-share="${share.ownerId}" data-share-label="${esc(share.name || share.email)}" data-share-edit="${share.canEdit ? "1" : "0"}">Abrir</button>
+                </div>`
+                  )
+                  .join("")
+              : `<p class="help">Ninguém compartilhou uma lista com você ainda.</p>`
+          }
+        </div>
+        <button class="text-btn" type="button" data-go="list">Voltar</button>
+      </div>
+    `;
+  }
+
+  async function renderAdminView() {
+    state.view = "admin";
+    state.adminOwners = await API.adminListOwners();
+    els.panelBody.innerHTML = `
+      <div class="form-stack">
+        <h3>Admin · usuários</h3>
+        <p class="help">Veja todas as casas ou abra a lista de um usuário.</p>
+        <button class="primary-btn" type="button" data-scope="all">Ver todas as casas</button>
+        <div class="share-list">
+          ${
+            state.adminOwners.length
+              ? state.adminOwners
+                  .map(
+                    (owner) => `
+                <div class="share-item">
+                  <div>
+                    <strong>${esc(owner.name || owner.email)}</strong>
+                    <small>${esc(owner.email)} · ${owner.houseCount} casa(s)</small>
+                  </div>
+                  <button type="button" class="text-btn" data-open-share="${owner.ownerId}" data-share-label="${esc(owner.name || owner.email)}" data-share-edit="0">Abrir</button>
+                </div>`
+                  )
+                  .join("")
+              : `<p class="help">Nenhum usuário ainda.</p>`
+          }
+        </div>
+        <button class="text-btn" type="button" data-go="list">Voltar</button>
+      </div>
+    `;
+  }
+
   function renderSidebar() {
+    updateScopeBar();
     renderSchoolCard();
-    if (state.view === "add") renderHouseForm(null);
-    else if (state.view === "edit") {
+    if (state.view === "add") {
+      if (!canAddHouses()) {
+        state.view = "list";
+        renderList();
+        return;
+      }
+      renderHouseForm(null);
+    } else if (state.view === "edit") {
       const house = state.houses.find((item) => item.id === state.editingId);
+      if (!house || !canEditHouse(house)) {
+        state.view = "list";
+        renderList();
+        return;
+      }
       renderHouseForm(house);
+    } else if (
+      state.view === "share" ||
+      state.view === "shared-with-me" ||
+      state.view === "admin"
+    ) {
+      // preenchido pelas ações do menu (async)
+      return;
     } else renderList();
   }
 
   function render() {
+    updateMenuUser();
+    updateScopeBar();
     renderSidebar();
-    renderMarkers();
-    const selected = state.houses.find((item) => item.id === state.selectedId);
-    drawRoute(selected);
-    renderNavBanner();
+    if (state.mapReady) {
+      renderMarkers();
+      const selected = state.houses.find((item) => item.id === state.selectedId);
+      drawRoute(selected);
+      renderNavBanner();
+    }
   }
 
   function renderNavBanner() {
@@ -970,11 +1332,37 @@
   }
 
   function go(view) {
+    if (view === "add" && !canAddHouses()) {
+      toast("Você não pode adicionar casas nesta lista.");
+      return;
+    }
     state.view = view;
     state.clickMode = view === "add" || view === "edit" ? "house" : null;
     setHint(state.clickMode === "house" ? "Clique no mapa para marcar a casa" : "");
     els.menuPop.classList.add("hidden");
     renderSidebar();
+  }
+
+  async function setScope(scope, opts = {}) {
+    state.scope = scope;
+    state.sharedOwnerId = opts.ownerId || null;
+    state.sharedOwnerLabel = opts.label || "";
+    state.sharedCanEdit = Boolean(opts.canEdit);
+    state.selectedId = null;
+    state.expandedId = null;
+    state.view = "list";
+    state.clickMode = null;
+    setHint("");
+    els.menuPop.classList.add("hidden");
+    try {
+      await loadHousesFromCloud();
+      await refreshSharesMeta();
+      render();
+      await refreshDistances();
+    } catch (err) {
+      console.error(err);
+      toast("Não foi possível carregar as casas.");
+    }
   }
 
   async function locateBairro(nome) {
@@ -1047,25 +1435,41 @@
 
     const placeName = localMatch?.nome || bairro;
 
-    if (state.view === "edit" && state.editingId) {
-      const house = state.houses.find((item) => item.id === state.editingId);
-      if (house) {
+    try {
+      if (state.view === "edit" && state.editingId) {
+        const house = state.houses.find((item) => item.id === state.editingId);
+        if (!house || !canEditHouse(house)) {
+          toast("Você não pode editar esta casa.");
+          return;
+        }
         Object.assign(house, { title, bairro: placeName, address, notes, lat, lng, precision });
+        await persistHouse(house);
+      } else {
+        if (!canAddHouses() || state.scope !== "mine") {
+          toast("Só o dono pode adicionar casas novas.");
+          return;
+        }
+        const house = {
+          id: uid(),
+          userId: state.user.id,
+          title,
+          bairro: placeName,
+          address,
+          notes,
+          lat,
+          lng,
+          precision,
+          canEdit: true,
+        };
+        const saved = await persistHouse(house);
+        state.houses.push({ ...house, ...saved, canEdit: true });
       }
-    } else {
-      state.houses.push({
-        id: uid(),
-        title,
-        bairro: placeName,
-        address,
-        notes,
-        lat,
-        lng,
-        precision,
-      });
+    } catch (err) {
+      console.error(err);
+      toast(err.message || "Não foi possível salvar a casa.");
+      return;
     }
 
-    save();
     state.view = "list";
     state.clickMode = null;
     setHint("");
@@ -1080,10 +1484,15 @@
       return;
     }
     if (state.clickMode !== "house" && state.view !== "add") return;
+    if (!canAddHouses() || state.scope === "shared") {
+      toast("Só o dono da lista pode marcar casas novas no mapa.");
+      return;
+    }
     const info = await reverseGeocode(lat, lng);
     const title = `Casa em ${info?.bairro || "Itatiba"}`;
-    state.houses.push({
+    const house = {
       id: uid(),
+      userId: state.user.id,
       title,
       bairro: info?.bairro || "",
       address: info?.road || "",
@@ -1091,8 +1500,16 @@
       lat,
       lng,
       precision: "mapa",
-    });
-    save();
+      canEdit: true,
+    };
+    try {
+      const saved = await persistHouse(house);
+      state.houses.push({ ...house, ...saved, canEdit: true });
+    } catch (err) {
+      console.error(err);
+      toast("Não foi possível salvar a casa.");
+      return;
+    }
     state.view = "list";
     state.clickMode = null;
     setHint("");
@@ -1157,10 +1574,15 @@
   async function useHit(index) {
     const hit = state.searchHits[index];
     if (!hit) return;
+    if (!canAddHouses() || state.scope !== "mine") {
+      toast("Só é possível adicionar casas na sua própria lista.");
+      return;
+    }
     const info = await reverseGeocode(hit.lat, hit.lng);
     const id = uid();
-    state.houses.push({
+    const house = {
       id,
+      userId: state.user.id,
       title: hit.name,
       bairro: hit.name,
       address: hit.address || info?.road || "",
@@ -1168,8 +1590,16 @@
       lat: hit.lat,
       lng: hit.lng,
       precision: hit.tipo === "condominio" ? "condominio" : "endereco",
-    });
-    save();
+      canEdit: true,
+    };
+    try {
+      const saved = await persistHouse(house);
+      state.houses.push({ ...house, ...saved, canEdit: true });
+    } catch (err) {
+      console.error(err);
+      toast("Não foi possível salvar a casa.");
+      return;
+    }
     map.flyTo([hit.lat, hit.lng], 16);
     const box = searchBox();
     if (box.results) {
@@ -1182,6 +1612,26 @@
     go("edit");
     toast("Casa adicionada. Complete apelido, observações ou o link do anúncio.");
     await refreshDistances();
+  }
+
+  async function migrateLocalToCloud() {
+    const local = readLocalHouses();
+    if (!local.length) {
+      toast("Não há casas salvas neste navegador.");
+      return;
+    }
+    if (!confirm(`Trazer ${local.length} casa(s) deste navegador para a sua conta?`)) return;
+    try {
+      await API.migrateLocalHouses(local);
+      clearLocalHouses();
+      await loadHousesFromCloud();
+      render();
+      await refreshDistances();
+      toast("Casas do navegador salvas na sua conta.");
+    } catch (err) {
+      console.error(err);
+      toast(err.message || "Falha ao migrar as casas.");
+    }
   }
 
   function exportData() {
@@ -1250,18 +1700,54 @@
     els.menuPop.addEventListener("click", (ev) => ev.stopPropagation());
     document.addEventListener("click", () => els.menuPop.classList.add("hidden"));
 
-    els.menuPop.addEventListener("click", (ev) => {
+    els.menuPop.addEventListener("click", async (ev) => {
       const action = ev.target.closest("button")?.dataset.action;
+      if (!action) return;
       if (action === "export") exportData();
-      if (action === "import") els.importFile.click();
+      if (action === "import") {
+        if (state.scope !== "mine") {
+          toast("Importe apenas na sua própria lista.");
+          return;
+        }
+        els.importFile.click();
+      }
       if (action === "clear") {
-        if (confirm("Apagar todas as casas deste navegador?")) {
+        if (state.scope !== "mine") {
+          toast("Só é possível apagar a sua própria lista.");
+          return;
+        }
+        if (!confirm("Apagar todas as suas casas na nuvem?")) return;
+        try {
+          await API.clearMyHouses();
           state.houses = [];
           state.selectedId = null;
-          save();
+          state.expandedId = null;
           render();
+          toast("Suas casas foram apagadas.");
+        } catch (err) {
+          console.error(err);
+          toast("Não foi possível apagar.");
         }
       }
+      if (action === "logout") {
+        await API.signOut();
+        await showLoggedOut();
+      }
+      if (action === "share") {
+        els.menuPop.classList.add("hidden");
+        await renderShareView();
+      }
+      if (action === "shared-with-me") {
+        els.menuPop.classList.add("hidden");
+        await renderSharedWithMeView();
+      }
+      if (action === "admin") {
+        if (!isAdmin()) return;
+        els.menuPop.classList.add("hidden");
+        await renderAdminView();
+      }
+      if (action === "mine") setScope("mine");
+      if (action === "migrate") migrateLocalToCloud();
     });
 
     els.importFile.addEventListener("change", async () => {
@@ -1269,13 +1755,15 @@
       if (!file) return;
       try {
         const data = JSON.parse(await file.text());
-        state.school = { ...FIXED_SCHOOL };
-        state.houses = Array.isArray(data.houses) ? data.houses : [];
-        save();
+        const houses = Array.isArray(data.houses) ? data.houses : [];
+        await API.migrateLocalHouses(houses);
+        await loadHousesFromCloud();
+        render();
         await refreshDistances();
-        toast("Dados importados.");
-      } catch {
-        toast("Arquivo inválido.");
+        toast("Dados importados na sua conta.");
+      } catch (err) {
+        console.error(err);
+        toast("Arquivo inválido ou falha ao importar.");
       }
       els.importFile.value = "";
     });
@@ -1291,7 +1779,12 @@
       });
     });
 
-    els.panelBody.addEventListener("click", (ev) => {
+    els.scopeBar?.addEventListener("click", (ev) => {
+      const scope = ev.target.closest("[data-scope]")?.dataset.scope;
+      if (scope === "mine") setScope("mine");
+    });
+
+    els.panelBody.addEventListener("click", async (ev) => {
       if (ev.target.closest("a[href]")) {
         ev.stopPropagation();
         return;
@@ -1307,19 +1800,63 @@
         useHit(Number(hitItem.dataset.hit));
         return;
       }
+      const revoke = ev.target.closest("[data-revoke]")?.dataset.revoke;
+      if (revoke) {
+        try {
+          await API.revokeShare(revoke);
+          toast("Compartilhamento removido.");
+          await renderShareView();
+        } catch (err) {
+          toast(err.message || "Falha ao remover.");
+        }
+        return;
+      }
+      const openShare = ev.target.closest("[data-open-share]");
+      if (openShare) {
+        await setScope("shared", {
+          ownerId: openShare.dataset.openShare,
+          label: openShare.dataset.shareLabel || "",
+          canEdit: openShare.dataset.shareEdit === "1",
+        });
+        return;
+      }
+      const scopeAll = ev.target.closest("[data-scope]")?.dataset.scope;
+      if (scopeAll === "all") {
+        await setScope("all");
+        return;
+      }
+      if (scopeAll === "mine") {
+        await setScope("mine");
+        return;
+      }
       const del = ev.target.closest("[data-del]")?.dataset.del;
       if (del) {
         ev.stopPropagation();
-        state.houses = state.houses.filter((item) => item.id !== del);
-        if (state.selectedId === del) state.selectedId = null;
-        if (state.expandedId === del) state.expandedId = null;
-        save();
-        render();
+        const house = state.houses.find((item) => item.id === del);
+        if (!house || house.userId !== state.user.id) {
+          toast("Só o dono pode excluir a casa.");
+          return;
+        }
+        try {
+          await API.deleteHouse(del);
+          state.houses = state.houses.filter((item) => item.id !== del);
+          if (state.selectedId === del) state.selectedId = null;
+          if (state.expandedId === del) state.expandedId = null;
+          render();
+        } catch (err) {
+          console.error(err);
+          toast("Não foi possível excluir.");
+        }
         return;
       }
       const edit = ev.target.closest("[data-edit]")?.dataset.edit;
       if (edit) {
         ev.stopPropagation();
+        const house = state.houses.find((item) => item.id === edit);
+        if (!house || !canEditHouse(house)) {
+          toast("Você não pode editar esta casa.");
+          return;
+        }
         state.editingId = edit;
         go("edit");
         return;
@@ -1346,12 +1883,25 @@
       if (select) selectHouse(select, true);
     });
 
-    els.panelBody.addEventListener("submit", (ev) => {
+    els.panelBody.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       if (ev.target.id === "house-form") submitHouse(ev.target);
       if (ev.target.id === "search-form") {
         const input = ev.target.querySelector("#search-input");
         runSearch(input?.value || "");
+      }
+      if (ev.target.id === "share-form") {
+        const data = new FormData(ev.target);
+        const email = String(data.get("email") || "").trim();
+        const canEdit = Boolean(data.get("canEdit"));
+        try {
+          await API.shareListWithEmail(email, canEdit);
+          toast("Lista compartilhada.");
+          ev.target.reset();
+          await renderShareView();
+        } catch (err) {
+          toast(err.message || "Não foi possível compartilhar.");
+        }
       }
     });
 
@@ -1360,11 +1910,153 @@
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => runSearch(ev.target.value), 400);
     });
+
+    els.authCard.addEventListener("click", async (ev) => {
+      const mode = ev.target.closest("[data-auth-mode]")?.dataset.authMode;
+      if (mode) {
+        state.authMode = mode;
+        state.authError = "";
+        renderAuthForm();
+        return;
+      }
+      if (ev.target.closest("#btn-google")) {
+        try {
+          await API.signInWithGoogle();
+        } catch (err) {
+          state.authError = err.message || "Google indisponível.";
+          renderAuthForm();
+        }
+      }
+    });
+
+    els.authCard.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (ev.target.id === "setup-form") {
+        const data = new FormData(ev.target);
+        API.saveLocalConfig({
+          supabaseUrl: String(data.get("supabaseUrl") || ""),
+          supabaseAnonKey: String(data.get("supabaseAnonKey") || ""),
+        });
+        if (!API.isConfigured()) {
+          state.authError = "Preencha URL e anon key válidas.";
+          renderAuthSetup();
+          return;
+        }
+        state.authError = "";
+        try {
+          await API.bootstrap();
+          renderAuthForm();
+        } catch (err) {
+          state.authError = err.message || "Configuração inválida.";
+          renderAuthSetup();
+        }
+        return;
+      }
+      if (ev.target.id === "auth-form") {
+        const data = new FormData(ev.target);
+        const email = String(data.get("email") || "");
+        const password = String(data.get("password") || "");
+        const btn = ev.target.querySelector("button[type='submit']");
+        if (btn) btn.disabled = true;
+        try {
+          if (state.authMode === "login") await API.signIn(email, password);
+          else {
+            const result = await API.signUp(email, password);
+            if (result.session) {
+              toast("Conta criada.");
+            } else {
+              state.authError = "";
+              toast("Conta criada. Confirme o email se o Supabase pedir verificação.");
+              renderAuthForm();
+              return;
+            }
+          }
+          await enterApp();
+        } catch (err) {
+          state.authError = err.message || "Falha na autenticação.";
+          renderAuthForm();
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      }
+    });
   }
 
-  load();
-  initMap();
-  bindEvents();
-  render();
-  refreshDistances();
+  async function showLoggedOut() {
+    state.user = null;
+    state.profile = null;
+    state.houses = [];
+    state.selectedId = null;
+    state.expandedId = null;
+    state.scope = "mine";
+    state.view = "list";
+    state.authError = "";
+    renderAuth();
+  }
+
+  async function enterApp() {
+    const session = await API.getSession();
+    if (!session?.user) {
+      await showLoggedOut();
+      return;
+    }
+    state.user = session.user;
+    state.profile = await API.getProfile();
+    state.authError = "";
+    els.authScreen.classList.add("hidden");
+    els.appShell.classList.remove("hidden");
+    if (!state.mapReady) {
+      initMap();
+      state.mapReady = true;
+      setTimeout(() => map.invalidateSize(), 50);
+    } else {
+      setTimeout(() => map.invalidateSize(), 50);
+    }
+    await load();
+    updateMenuUser();
+    render();
+    await refreshDistances();
+    const local = readLocalHouses();
+    if (local.length && state.scope === "mine") {
+      toast(`Há ${local.length} casa(s) neste navegador. Use o menu → Trazer casas deste navegador.`);
+    }
+  }
+
+  async function boot() {
+    bindEvents();
+    if (!API.isConfigured()) {
+      renderAuth();
+      return;
+    }
+    try {
+      await API.bootstrap();
+      let handlingAuth = false;
+      API.onAuthStateChange(async (event, session) => {
+        if (handlingAuth) return;
+        if (event === "SIGNED_OUT" || !session) {
+          if (state.user) await showLoggedOut();
+          return;
+        }
+        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+          if (!state.user || state.user.id !== session.user.id) {
+            handlingAuth = true;
+            try {
+              await enterApp();
+            } finally {
+              handlingAuth = false;
+            }
+          }
+        }
+      });
+      const session = await API.getSession();
+      if (session?.user) await enterApp();
+      else await showLoggedOut();
+    } catch (err) {
+      console.error(err);
+      state.authError = err.message || "Não foi possível conectar ao Supabase.";
+      renderAuth();
+    }
+  }
+
+  boot();
 })();
