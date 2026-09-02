@@ -458,15 +458,15 @@
 
   async function geocode(query) {
     const key = query.trim().toLowerCase();
-    const cache = geoCache();
-    if (cache[key]?.length) return cache[key];
-
     const local = findLocais(query);
     const withCoords = local.map((row) => hitFromLocal(row.item)).filter(Boolean);
     if (withCoords.length) {
       putGeoCache(key, withCoords);
       return withCoords;
     }
+
+    const cache = geoCache();
+    if (cache[key]?.length) return cache[key];
 
     const attempts = [
       ...queryFallbacks(query),
