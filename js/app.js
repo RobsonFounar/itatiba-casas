@@ -1074,12 +1074,61 @@
   }
 
   function bairroOptions(selected) {
-    return (window.ITATIBA_LOCAIS || []).map(
-      (item) =>
-        `<option value="${esc(item.nome)}" ${
-          item.nome === selected ? "selected" : ""
-        }></option>`
-    ).join("");
+    const seen = new Set();
+    const opts = [];
+    for (const item of window.ITATIBA_LOCAIS || []) {
+      const values = [item.nome, ...(item.aliases || [])];
+      for (const value of values) {
+        const key = value.trim().toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        opts.push(
+          `<option value="${esc(value)}" ${value === selected ? "selected" : ""}></option>`
+        );
+      }
+    }
+    return opts.join("");
+  }
+
+  function renderBairroSuggest(query) {
+    const list = document.getElementById("bairro-suggest");
+    if (!list) return;
+    const q = String(query || "").trim();
+    if (q.length < 2) {
+      list.classList.add("hidden");
+      list.innerHTML = "";
+      return;
+    }
+    const hits = findLocais(q, 70).slice(0, 8);
+    if (!hits.length) {
+      list.classList.add("hidden");
+      list.innerHTML = "";
+      return;
+    }
+    list.innerHTML = hits
+      .map(
+        ({ item }) => `
+        <li data-bairro="${esc(item.nome)}">
+          <strong>${esc(item.nome)}</strong>
+          <small>${item.tipo === "condominio" ? "Condomínio" : "Bairro"}</small>
+        </li>`
+      )
+      .join("");
+    list.classList.remove("hidden");
+  }
+
+  function pickBairro(nome) {
+    const input = els.panelBody.querySelector('input[name="bairro"]');
+    if (input) input.value = nome;
+    const list = document.getElementById("bairro-suggest");
+    if (list) {
+      list.classList.add("hidden");
+      list.innerHTML = "";
+    }
+    const local = findLocais(nome, 70)[0]?.item;
+    if (local?.lat != null && map) {
+      map.flyTo([local.lat, local.lng], 15);
+    }
   }
 
   function renderHouseForm(house) {
@@ -1098,7 +1147,7 @@
           <input
             id="search-input"
             type="search"
-            placeholder="Buscar condomínio, bairro ou rua"
+            placeholder="Buscar condomínio, bairro ou rua — ex.: Paineiras"
             aria-label="Buscar em Itatiba"
           />
           <button type="submit">Buscar</button>
@@ -1115,8 +1164,9 @@
             <input name="title" required placeholder="Ex.: Casa 3 quartos no Engenho" value="${esc(title)}" />
           </label>
           <label class="field">Bairro ou condomínio
-            <input name="bairro" list="bairros-list" required placeholder="Ex.: Ville de France, Nova Itatiba" value="${esc(bairro)}" />
+            <input name="bairro" list="bairros-list" required autocomplete="off" placeholder="Ex.: Paineiras, Privilege, Engenho" value="${esc(bairro)}" />
             <datalist id="bairros-list">${bairroOptions(bairro)}</datalist>
+            <ul class="search-results hidden" id="bairro-suggest"></ul>
           </label>
           <label class="field">Rua e número (opcional)
             <input name="address" placeholder="Ex.: Rua das Flores, 120" value="${esc(address)}" />
@@ -1819,14 +1869,18 @@
         ev.stopPropagation();
         return;
       }
+      const bairroPick = ev.target.closest("[data-bairro]");
+      if (bairroPick) {
+        pickBairro(bairroPick.dataset.bairro);
+        return;
+      }
       const goTo = ev.target.closest("[data-go]")?.dataset.go;
       if (goTo) {
         go(goTo);
         return;
       }
-      const useBtn = ev.target.closest("[data-use]");
       const hitItem = ev.target.closest("[data-hit]");
-      if (useBtn && hitItem) {
+      if (hitItem && (ev.target.closest("[data-use]") || ev.target.closest("li"))) {
         useHit(Number(hitItem.dataset.hit));
         return;
       }
@@ -1936,9 +1990,12 @@
     });
 
     els.panelBody.addEventListener("input", (ev) => {
-      if (ev.target.id !== "search-input") return;
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => runSearch(ev.target.value), 400);
+      if (ev.target.id === "search-input") {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => runSearch(ev.target.value), 400);
+        return;
+      }
+      if (ev.target.name === "bairro") renderBairroSuggest(ev.target.value);
     });
 
     els.authCard.addEventListener("click", async (ev) => {

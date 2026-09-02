@@ -710,6 +710,10 @@ textarea {
   resize: vertical;
 }
 
+.field .search-results {
+  font-weight: 400;
+}
+
 .help {
   font-size: 12px;
   color: var(--muted);
