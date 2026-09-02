@@ -133,6 +133,9 @@
     if (/Email not confirmed/i.test(msg)) return "Confirme o email antes de entrar.";
     if (/User already registered/i.test(msg)) return "Este email já tem conta. Entre com a senha.";
     if (/Password should be at least/i.test(msg)) return "A senha precisa ter pelo menos 6 caracteres.";
+    if (/Unsupported provider|provider is not enabled/i.test(msg)) {
+      return "Login com Google ainda não está ativado no Supabase. Use email e senha, ou ative o provedor Google.";
+    }
     return msg;
   }
 
