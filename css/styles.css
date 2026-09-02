@@ -19,7 +19,18 @@
 }
 
 html,
-body,
+body {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.app-shell {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
 #map {
   margin: 0;
   height: 100%;
@@ -1046,6 +1057,231 @@ textarea {
   text-align: center;
   border-top: 1px solid var(--line);
   flex-shrink: 0;
+}
+
+.menu-user {
+  margin: 0;
+  padding: 8px 12px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  word-break: break-all;
+}
+
+.scope-bar {
+  margin: 8px 16px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--blue-soft);
+  color: var(--blue-dark);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scope-bar button {
+  border: 0;
+  background: #fff;
+  color: var(--blue);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background:
+    linear-gradient(160deg, rgba(26, 115, 232, 0.12), rgba(24, 128, 56, 0.1)),
+    #e8eaed;
+}
+
+.auth-screen.hidden {
+  display: none !important;
+}
+
+.auth-card {
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  padding: 24px 22px 20px;
+}
+
+.auth-card h1 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}
+
+.auth-card .auth-sub {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 14px;
+  background: #f1f3f4;
+  border-radius: 999px;
+  padding: 4px;
+}
+
+.auth-tabs button {
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.auth-tabs button.is-on {
+  background: #fff;
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.2);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-form .field input {
+  width: 100%;
+}
+
+.auth-error {
+  margin: 0;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.google-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.google-btn:hover {
+  background: #f8f9fa;
+}
+
+.auth-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-setup code {
+  font-size: 12px;
+  background: #f1f3f4;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.auth-help {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.share-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.share-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.share-item strong {
+  display: block;
+  font-size: 13px;
+}
+
+.share-item small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.share-item .text-btn {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--red);
+}
+
+.owner-chip {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.readonly-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #eef0f2;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: middle;
 }
 
 @media (max-width: 840px) {
