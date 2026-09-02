@@ -343,7 +343,7 @@
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\b(condominio|residencial|loteamento|fechado|cond)\b/g, " ")
+      .replace(/\b(condominio|residencial|loteamento|fechado|cond|bairro|jardim|vila|nucleo)\b/g, " ")
       .replace(/[^a-z0-9]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
