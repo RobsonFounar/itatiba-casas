@@ -353,16 +353,46 @@
     return [item.nome, ...(item.aliases || [])];
   }
 
+  function foldKeep(value) {
+    return String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function scoreLocal(item, query) {
     const q = fold(query);
+    const qKeep = foldKeep(query);
     if (!q || q.length < 2) return 0;
     let best = 0;
     for (const name of localNames(item)) {
       const n = fold(name);
+      const nKeep = foldKeep(name);
       if (!n) continue;
-      if (n === q) return 100;
+      if (nKeep === qKeep) return 120;
+      if (n === q) best = Math.max(best, 100);
       if (n.startsWith(q) || q.startsWith(n)) best = Math.max(best, 92);
       if (n.includes(q) || (q.length >= 5 && q.includes(n))) best = Math.max(best, 80);
+    }
+    return best;
+  }
+
+  function closenessLocal(item, query) {
+    const qKeep = foldKeep(query);
+    let best = 0;
+    for (const name of localNames(item)) {
+      const nKeep = foldKeep(name);
+      if (!nKeep) continue;
+      if (nKeep === qKeep) best = Math.max(best, 3);
+      else if (qKeep.includes(nKeep) || nKeep.includes(qKeep)) best = Math.max(best, 2);
+      else {
+        const qTok = new Set(qKeep.split(" "));
+        const shared = nKeep.split(" ").filter((tok) => qTok.has(tok)).length;
+        if (shared) best = Math.max(best, 1);
+      }
     }
     return best;
   }
@@ -371,7 +401,7 @@
     return (window.ITATIBA_LOCAIS || [])
       .map((item) => ({ item, score: scoreLocal(item, query) }))
       .filter((row) => row.score >= min)
-      .sort((a, b) => b.score - a.score || a.item.nome.localeCompare(b.item.nome, "pt-BR"));
+      .sort((a, b) => b.score - a.score || closenessLocal(b.item, query) - closenessLocal(a.item, query) || a.item.nome.localeCompare(b.item.nome, "pt-BR"));
   }
 
   function hitFromLocal(item) {
