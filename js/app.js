@@ -42,6 +42,10 @@
     btnMenu: document.getElementById("btn-menu"),
     menuPop: document.getElementById("menu-pop"),
     menuUser: document.getElementById("menu-user"),
+    accountKicker: document.getElementById("account-kicker"),
+    accountName: document.getElementById("account-name"),
+    accountEmail: document.getElementById("account-email"),
+    btnLogout: document.getElementById("btn-logout"),
     menuShared: document.getElementById("menu-shared"),
     menuAdmin: document.getElementById("menu-admin"),
     menuMine: document.getElementById("menu-mine"),
@@ -197,10 +201,33 @@
   }
 
   function updateMenuUser() {
-    if (!els.menuUser) return;
-    const label = state.profile?.email || state.user?.email || "";
+    const email = state.profile?.email || state.user?.email || "";
+    const name = state.profile?.displayName || state.user?.user_metadata?.full_name || "";
     const role = isAdmin() ? " · admin" : "";
-    els.menuUser.textContent = label ? `${label}${role}` : "";
+    if (els.menuUser) els.menuUser.textContent = email ? `${email}${role}` : "";
+    if (els.accountKicker) {
+      els.accountKicker.textContent = isAdmin() ? "Conta logada · admin" : "Conta logada";
+    }
+    const showName = Boolean(name && email && name.toLowerCase() !== email.toLowerCase());
+    if (els.accountName) {
+      els.accountName.textContent = showName ? name : "";
+      els.accountName.classList.toggle("hidden", !showName);
+    }
+    if (els.accountEmail) {
+      els.accountEmail.textContent = email || "Conta sem e-mail";
+      els.accountEmail.title = email;
+    }
+  }
+
+  async function logout() {
+    try {
+      await API.signOut();
+    } catch (err) {
+      console.error(err);
+      toast("Não foi possível sair. Tente de novo.");
+      return;
+    }
+    await showLoggedOut();
   }
 
   function updateScopeBar() {
@@ -1777,6 +1804,7 @@
       ev.stopPropagation();
       els.menuPop.classList.toggle("hidden");
     });
+    els.btnLogout?.addEventListener("click", () => logout());
     els.menuPop.addEventListener("click", (ev) => ev.stopPropagation());
     document.addEventListener("click", () => els.menuPop.classList.add("hidden"));
 
@@ -1809,10 +1837,7 @@
           toast("Não foi possível apagar.");
         }
       }
-      if (action === "logout") {
-        await API.signOut();
-        await showLoggedOut();
-      }
+      if (action === "logout") await logout();
       if (action === "share") {
         els.menuPop.classList.add("hidden");
         await renderShareView();

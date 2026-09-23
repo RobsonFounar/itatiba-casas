@@ -19,7 +19,7 @@
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     />
-    <link rel="stylesheet" href="css/styles.css?v=20260902-paineiras2" />
+    <link rel="stylesheet" href="css/styles.css?v=20260923-conta" />
   </head>
   <body>
     <div id="auth-screen" class="auth-screen">
@@ -53,6 +53,15 @@
             </svg>
           </button>
         </header>
+
+        <div class="account-bar" id="account-bar">
+          <div class="account-id">
+            <span class="account-kicker" id="account-kicker">Conta logada</span>
+            <strong class="account-name hidden" id="account-name"></strong>
+            <span class="account-email" id="account-email"></span>
+          </div>
+          <button type="button" class="account-logout" id="btn-logout">Sair</button>
+        </div>
 
         <div class="menu-pop hidden" id="menu-pop">
           <p class="menu-user" id="menu-user"></p>
@@ -111,7 +120,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/config.js"></script>
     <script src="js/api.js"></script>
-    <script src="js/bairros.js?v=20260902-paineiras2"></script>
-    <script src="js/app.js?v=20260902-paineiras2"></script>
+    <script src="js/bairros.js?v=20260923-conta"></script>
+    <script src="js/app.js?v=20260923-conta"></script>
   </body>
 </html>
