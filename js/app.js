@@ -365,6 +365,12 @@
     );
   }
 
+  function tipoLabel(tipo) {
+    if (tipo === "condominio") return "Condomínio";
+    if (tipo === "rua") return "Rua";
+    return "Bairro";
+  }
+
   function fold(value) {
     return String(value || "")
       .toLowerCase()
@@ -1137,7 +1143,7 @@
         ({ item }) => `
         <li data-bairro="${esc(item.nome)}">
           <strong>${esc(item.nome)}</strong>
-          <small>${item.tipo === "condominio" ? "Condomínio" : "Bairro"}</small>
+          <small>${tipoLabel(item.tipo)}</small>
         </li>`
       )
       .join("");
@@ -1665,7 +1671,7 @@
           (hit, i) => `
           <li data-hit="${i}" class="${i === 0 ? "is-active" : ""}">
             <strong>${esc(hit.name)}</strong>
-            <small>${esc(hit.tipo === "condominio" ? `Condomínio · ${hit.label}` : hit.label)}</small>
+            <small>${esc(hit.tipo === "condominio" || hit.tipo === "rua" ? `${tipoLabel(hit.tipo)} · ${hit.label}` : hit.label)}</small>
             <div class="result-actions">
               <button type="button" data-use="house">Adicionar casa</button>
             </div>
